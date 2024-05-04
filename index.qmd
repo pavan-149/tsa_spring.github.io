@@ -1,11 +1,333 @@
 ---
-title: "pavan-149.github.io"
+title: "Time Series, Final Presentation: \n Multiple Changepoint Detection on Bitcoin History"
+author: "Sri Sai Pavan Varma Bhupathiraju"
+format: revealjs
+editor: source
+toc: true
+toc-depth: 1
+slide-number: true
+smaller: false
+scrollable: true 
+execute:
+  echo: true
+editor_options: 
+  chunk_output_type: console
 ---
 
-This is a Quarto website.
+# Objective
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+The objective of the analysis is to utilize advanced statistical techniques for change point detection to understand the dynamics of Bitcoin's price movements over time. This aims to identify significant shifts in the statistical properties of Bitcoin prices and forecast future trends.
+
+## Dataset Source:
+
+-   <https://www.kaggle.com/datasets/shiivvvaam/bitcoin-historical-data>
+
+The dataset I have considered is Bitcoin History provides a detailed record of Bitcoin's daily price movements. Capturing key metrics such as opening, closing, high, low prices, and trading volume, the dataset spans from July 18, 2010, to February 9, 2024.
+
+# Implementation
+
+## Libraries
 
 ```{r}
-1 + 1
+# Loading the necessary libraries
+library(reprex)
+library(fredr)
+library(zoo)
+library(ggplot2)
+library(changepoint) 
+library(imputeTS)
+library(forecast)
+library(bfast) 
+library(tsbox) 
+library(tseries)
+library(corrplot)
+library(plotly)
+library(dplyr)
+library(knitr)
+library(kableExtra)
 ```
+
+## Loading Data
+
+```{r}
+setwd("C:/Users/pavan varma/OneDrive - University at Buffalo/Desktop/Spring Sem/TSA")
+
+bitcoin_history <- read.csv("Bitcoin History.csv", header = TRUE)
+
+# Convert the date column to Date format using the correct format
+# Assuming the date column is named 'Date'
+bitcoin_history$Date <- as.Date(bitcoin_history$Date, format="%b %d, %Y")
+
+# Convert all financial-related character columns to numeric
+# Remove any non-numeric characters like commas and percentage signs
+numeric_columns <- c("Price", "Open", "High", "Low", "Change..")  # Include all columns that need conversion
+bitcoin_history[numeric_columns] <- lapply(bitcoin_history[numeric_columns], function(x) as.numeric(gsub("[^0-9.-]", "", x)))
+
+# Convert 'Vol.' removing 'K' and converting to actual numbers
+# Define a function to handle the conversion of volume data
+convert_volume <- function(x) {
+  x <- as.character(x)
+  multiplier <- ifelse(grepl("K", x), 1000, ifelse(grepl("M", x), 1e6, 1))
+  as.numeric(gsub("[^0-9.-]", "", x)) * multiplier
+}
+
+bitcoin_history$Vol. <- convert_volume(bitcoin_history$Vol.)
+```
+
+## DataPlot
+
+```{r}
+# Sorting the dataset by Date in ascending order
+bitcoin_history <- bitcoin_history[order(bitcoin_history$Date),]
+
+# Plot the time series
+plot_output <- ggplot(bitcoin_history, aes(x = Date, y = Price)) +
+  geom_line() +
+  labs(title = "Bitcoin Price Over Time", x = "Date", y = "Price")
+
+# Print the plot
+print(plot_output)
+```
+
+## Correlation
+
+```{r}
+correlation_matrix <- cor(bitcoin_history[, sapply(bitcoin_history, is.numeric)], use = "complete.obs")
+
+# Correlation matrix
+print(correlation_matrix)
+```
+
+## Correlation Plot
+
+```{r}
+# Visualizing the correlation matrix using corrplot
+corrplot(correlation_matrix, method = "circle")
+```
+
+## Stationarity Check
+
+```{r}
+bitcoin_ts <- ts(bitcoin_history$Price, start = c(2011, 1), frequency = 365)
+
+# Performing Augmented Dickey-Fuller (ADF) test for stationarity
+adf_test = adf.test(bitcoin_ts)
+
+results <- list(
+    "Test Statistic" = adf_test$statistic,
+    "P-Value" = adf_test$p.value,
+    "Number of Lags Used" = adf_test$lag,
+    "Number of Observations Used" = adf_test$n.used,
+    "Critical Values" = adf_test$cval
+  )
+
+results
+```
+
+## Time Series Decomposition
+
+```{r}
+bitcoin_ts <- ts(bitcoin_history$Price, frequency = 365)
+
+start_date <- as.Date("2010-06-18") 
+
+# Decomposing the time series
+decomposed_data <- decompose(bitcoin_ts, type = "multiplicative")  # or "additive"
+
+dates <- seq(from = start_date, length.out = length(bitcoin_ts), by = "day")
+
+# Extracting components and merging them into a data frame
+df_components <- data.frame(
+  Date = dates,
+  Trend = decomposed_data$trend,
+  Seasonal = decomposed_data$seasonal,
+  Random = decomposed_data$random
+)
+
+# Remove rows with NA values to avoid issues in plotting
+df_components <- na.omit(df_components)
+```
+
+## Plot for Timeseries Decomposition
+
+```{r}
+# Plotting each component
+ggplot(df_components, aes(x = Date)) +
+  geom_line(aes(y = Trend), color = "blue", linetype = "solid", linewidth = 1, alpha = 0.8) +
+  geom_line(aes(y = Seasonal), color = "red", linetype = "dashed", linewidth = 1, alpha = 0.8) +
+  geom_line(aes(y = Random), color = "green", linetype = "dotted", linewidth = 1, alpha = 0.8) +
+  labs(title = "Bitcoin Price Decomposition",
+       x = "Date",
+       y = "Value",
+       color = "Component") +
+  theme_minimal()
+```
+
+## Seasonality Check
+
+```{r}
+# Perform Fast Fourier Transform (FFT) on the time series
+fft_result <- fft(bitcoin_ts)
+
+# Compute the power spectrum
+power_spectrum <- Mod(fft_result)^2 / length(bitcoin_ts)
+
+# Identify the dominant frequencies
+dominant_frequencies <- which(power_spectrum == max(power_spectrum))
+
+# Convert the dominant frequencies to seasonal periods
+seasonal_periods <- 365 / dominant_frequencies
+
+# Print the detected seasonal periods
+print(paste("Detected seasonal periods:", seasonal_periods))
+```
+
+# Changepoints
+
+Changepoints, also known as breakpoints, structural breaks, or regime switches, are points in a time series where the statistical properties, such as mean or variance, exhibit significant shifts. Detecting these changes is crucial in fields like quality control, finance, and environmental studies, where understanding the timing and nature of shifts can inform decision-making and reveal underlying processes.
+
+## Single Changepoint Detection:
+
+In single changepoint detection, methods often focus on identifying a single, significant change in the data's structure. The goal is to find where a single change in the statistical properties of the data has occurred, estimating the position and evaluating the significance of this change.
+
+## Multiple Changepoint Detection:
+
+Multiple changepoint detection aims to identify several points where the data properties change. This involves more complex methodologies, such as:
+
+**Binary Segmentation** **(BinSeg)**: This method is fast but approximate, suitable for a preliminary analysis. It recursively divides the data into segments and tests each segment for potential changepoints.
+
+**Segment Neighbourhood** **(SegNeigh)**: Offers exact results by exhaustively searching over all possible segmentations, which can be computationally expensive.
+
+**Pruned Exact Linear Time (PELT)**: This method is both fast and exact, making it suitable for large datasets or scenarios with multiple expected changes. It aims to minimize a cost function across all segments, penalized by a function of the number of changepoints to control model complexity.
+
+These methods often involve minimizing a cost function that measures the fit of segments to the data, adjusted by a penalty that increases with the number of changepoints to prevent overfitting. This balance helps ensure that the detection of changepoints is neither too sensitive (detecting too many false positives) nor too insensitive (missing actual changes).
+
+## Multiple Cpt Detection
+
+```{r}
+penalty_value <- 1000000 * length(bitcoin_history$Price)
+
+# Apply change point detection on mean with the penalty
+cpt_result <- cpt.mean(bitcoin_history$Price, method = "PELT", penalty = "Manual", pen.value = penalty_value)
+
+# Extract the change points
+change_points <- cpts(cpt_result)
+
+print(length(change_points))
+```
+
+## Multiple Chagepoints
+
+```{r}
+# Access the respective records from the main dataframe
+change_point_records <- bitcoin_history[change_points, ]
+
+# If change points are detected, print them as a table
+if(nrow(change_point_records) > 0) {
+  # Use knitr and kableExtra to create a nicely formatted table
+  kable(change_point_records, "html", caption = "Full Records at Detected Change Points in Bitcoin Price") %>%
+    kable_styling("striped", full_width = F)
+} else {
+  print("No change points were detected with the specified penalty value.")
+}
+```
+
+## Multiple Changepoint Detetcion for Exponentially Smoothed data
+
+```{r}
+ts_price <- ts(bitcoin_history$Price, frequency = 365)
+
+# Defining alpha values and applying exponential smoothing
+alpha_values <- c(0.01, 0.03, 0.05, 0.3)
+models <- lapply(alpha_values, function(alpha) {
+  ets_model <- ets(ts_price, "ANN", alpha = alpha, opt.crit = "mse", lambda = 0)
+  forecast(ets_model, h = 10)
+})
+
+fitted_values <- lapply(models, function(x) x$fitted)
+names(fitted_values) <- paste("Alpha", alpha_values)
+
+fitted_values$Actual <- bitcoin_history$Price
+
+plot_data <- do.call(cbind, fitted_values)
+plot_data <- as.data.frame(plot_data)
+plot_data$Date <- bitcoin_history$Date
+
+plot_data_long <- tidyr::pivot_longer(plot_data, cols = -Date, names_to = "Series", values_to = "Close")
+
+# Applying change point detection on the exponential smoothing models
+change_points_es <- lapply(fitted_values, function(x) {
+  cpt_result <- cpt.mean(x, method = "PELT", penalty = "Manual", pen.value = penalty_value)
+  cpts(cpt_result)
+})
+
+print(length(change_points_es))
+```
+
+## Plot of Multiple Cpt for exponentially smoothed data
+
+```{r}
+change_point_df <- data.frame(
+  Date = bitcoin_history$Date,
+  Actual = bitcoin_history$Price
+)
+
+for (i in 1:length(alpha_values)) {
+  change_point_df[[paste0("Alpha", alpha_values[i])]] <- 0
+  change_point_df[change_points_es[[i]], paste0("Alpha", alpha_values[i])] <- 1
+}
+```
+
+## Plot
+
+```{r}
+# Plotting the Bitcoin prices with change points for each exponential smoothing model
+ggplot(change_point_df, aes(x = Date)) +
+  geom_line(aes(y = Actual), color = "blue", linewidth = 1) +
+  geom_point(aes(y = Actual, color = paste0("Alpha", alpha_values[1])), data = change_point_df[change_point_df[[paste0("Alpha", alpha_values[1])]] == 1, ], size = 4) +
+  geom_point(aes(y = Actual, color = paste0("Alpha", alpha_values[2])), data = change_point_df[change_point_df[[paste0("Alpha", alpha_values[2])]] == 1, ], size = 4) +
+  geom_point(aes(y = Actual, color = paste0("Alpha", alpha_values[3])), data = change_point_df[change_point_df[[paste0("Alpha", alpha_values[3])]] == 1, ], size = 4) +
+  geom_point(aes(y = Actual, color = paste0("Alpha", alpha_values[4])), data = change_point_df[change_point_df[[paste0("Alpha", alpha_values[4])]] == 1, ], size = 4) +
+  labs(title = "Bitcoin Close Prices with Change Points in Exponential Smoothing",
+       x = "Date", y = "Close Price",
+       color = "Smoothing Factor") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+## Arima Model
+
+```{r}
+
+segments <- split(bitcoin_ts, cumsum(seq_along(bitcoin_ts) %in% change_points))
+
+models <- lapply(segments, function(segment) {
+    auto.arima(segment)
+})
+
+# Identifying the most recent segment
+recent_segment_index <- length(models)
+
+recent_forecast <- forecast(models[[recent_segment_index]], h = 10)
+```
+
+# Forcasts
+
+```{r}
+cat(paste0("Forecast for the Most Recent Segment (Segment ", recent_segment_index, "):\n"))
+print(recent_forecast$mean[1])
+
+plot(recent_forecast, main = paste("Forecast for Segment", recent_segment_index))
+
+```
+
+# Practical Implications
+
+-   Market Strategy : The analysis using change point detection and forecasting provides critical insights for investors and financial analysts. By identifying key periods of price shifts, it aids in crafting effective market entry ̥and exit strategies, enhancing investment performance.
+-   Regulatory Enhancements :For regulators, the detection of significant market changes can improve oversight and policy-making for cryptocurrencies, ensuring a more stable financial environment.
+
+# Conclusion
+
+The comprehensive analysis not only reinforced the volatile nature of Bitcoin but also highlighted the utility of advanced statistical techniques in forecasting and understanding complex financial time series. Change point detection, in particular, proved instrumental in identifying key periods of shifts in market conditions, which could be pivotal for traders, investors, and financial analysts.
+
+## Thank you....

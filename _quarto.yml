@@ -6,7 +6,7 @@ website:
   title: "pavan-149.github.io"
   navbar:
     left:
-      - href: sbhupath_TSAFinal.qmd
+      - href: index.qmd
         text: Home
       - about.qmd
 
