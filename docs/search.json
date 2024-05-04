@@ -1,0 +1,135 @@
+[
+  {
+    "objectID": "sbhupath_TSAFinal.html#dataset-source",
+    "href": "sbhupath_TSAFinal.html#dataset-source",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Dataset Source:",
+    "text": "Dataset Source:\n\nhttps://www.kaggle.com/datasets/shiivvvaam/bitcoin-historical-data\n\nThe dataset I have considered is Bitcoin History provides a detailed record of Bitcoin’s daily price movements. Capturing key metrics such as opening, closing, high, low prices, and trading volume, the dataset spans from July 18, 2010, to February 9, 2024."
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#libraries",
+    "href": "sbhupath_TSAFinal.html#libraries",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Libraries",
+    "text": "Libraries\n\n# Loading the necessary libraries\nlibrary(reprex)\nlibrary(fredr)\nlibrary(zoo)\nlibrary(ggplot2)\nlibrary(changepoint) \nlibrary(imputeTS)\nlibrary(forecast)\nlibrary(bfast) \nlibrary(tsbox) \nlibrary(tseries)\nlibrary(corrplot)\nlibrary(plotly)\nlibrary(dplyr)\nlibrary(knitr)\nlibrary(kableExtra)"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#loading-data",
+    "href": "sbhupath_TSAFinal.html#loading-data",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Loading Data",
+    "text": "Loading Data\n\nsetwd(\"C:/Users/pavan varma/OneDrive - University at Buffalo/Desktop/Spring Sem/TSA\")\n\nbitcoin_history &lt;- read.csv(\"Bitcoin History.csv\", header = TRUE)\n\n# Convert the date column to Date format using the correct format\n# Assuming the date column is named 'Date'\nbitcoin_history$Date &lt;- as.Date(bitcoin_history$Date, format=\"%b %d, %Y\")\n\n# Convert all financial-related character columns to numeric\n# Remove any non-numeric characters like commas and percentage signs\nnumeric_columns &lt;- c(\"Price\", \"Open\", \"High\", \"Low\", \"Change..\")  # Include all columns that need conversion\nbitcoin_history[numeric_columns] &lt;- lapply(bitcoin_history[numeric_columns], function(x) as.numeric(gsub(\"[^0-9.-]\", \"\", x)))\n\n# Convert 'Vol.' removing 'K' and converting to actual numbers\n# Define a function to handle the conversion of volume data\nconvert_volume &lt;- function(x) {\n  x &lt;- as.character(x)\n  multiplier &lt;- ifelse(grepl(\"K\", x), 1000, ifelse(grepl(\"M\", x), 1e6, 1))\n  as.numeric(gsub(\"[^0-9.-]\", \"\", x)) * multiplier\n}\n\nbitcoin_history$Vol. &lt;- convert_volume(bitcoin_history$Vol.)"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#dataplot",
+    "href": "sbhupath_TSAFinal.html#dataplot",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "DataPlot",
+    "text": "DataPlot\n\n# Sorting the dataset by Date in ascending order\nbitcoin_history &lt;- bitcoin_history[order(bitcoin_history$Date),]\n\n# Plot the time series\nplot_output &lt;- ggplot(bitcoin_history, aes(x = Date, y = Price)) +\n  geom_line() +\n  labs(title = \"Bitcoin Price Over Time\", x = \"Date\", y = \"Price\")\n\n# Print the plot\nprint(plot_output)"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#correlation",
+    "href": "sbhupath_TSAFinal.html#correlation",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Correlation",
+    "text": "Correlation\n\ncorrelation_matrix &lt;- cor(bitcoin_history[, sapply(bitcoin_history, is.numeric)], use = \"complete.obs\")\n\n# Correlation matrix\nprint(correlation_matrix)\n\n               Price        Open        High         Low         Vol.\nPrice     1.00000000  0.99906691  0.99957423  0.99948556  0.193903887\nOpen      0.99906691  1.00000000  0.99958437  0.99926831  0.194869829\nHigh      0.99957423  0.99958437  1.00000000  0.99913133  0.193614681\nLow       0.99948556  0.99926831  0.99913133  1.00000000  0.196023836\nVol.      0.19390389  0.19486983  0.19361468  0.19602384  1.000000000\nChange.. -0.01731958 -0.03057093 -0.02353712 -0.02260976 -0.009518288\n             Change..\nPrice    -0.017319581\nOpen     -0.030570933\nHigh     -0.023537125\nLow      -0.022609765\nVol.     -0.009518288\nChange..  1.000000000"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#correlation-plot",
+    "href": "sbhupath_TSAFinal.html#correlation-plot",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Correlation Plot",
+    "text": "Correlation Plot\n\n# Visualizing the correlation matrix using corrplot\ncorrplot(correlation_matrix, method = \"circle\")"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#stationarity-check",
+    "href": "sbhupath_TSAFinal.html#stationarity-check",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Stationarity Check",
+    "text": "Stationarity Check\n\nbitcoin_ts &lt;- ts(bitcoin_history$Price, start = c(2011, 1), frequency = 365)\n\n# Performing Augmented Dickey-Fuller (ADF) test for stationarity\nadf_test = adf.test(bitcoin_ts)\n\nresults &lt;- list(\n    \"Test Statistic\" = adf_test$statistic,\n    \"P-Value\" = adf_test$p.value,\n    \"Number of Lags Used\" = adf_test$lag,\n    \"Number of Observations Used\" = adf_test$n.used,\n    \"Critical Values\" = adf_test$cval\n  )\n\nresults\n\n$`Test Statistic`\nDickey-Fuller \n    -2.177311 \n\n$`P-Value`\n[1] 0.5032561\n\n$`Number of Lags Used`\nNULL\n\n$`Number of Observations Used`\nNULL\n\n$`Critical Values`\nNULL"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#time-series-decomposition",
+    "href": "sbhupath_TSAFinal.html#time-series-decomposition",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Time Series Decomposition",
+    "text": "Time Series Decomposition\n\nbitcoin_ts &lt;- ts(bitcoin_history$Price, frequency = 365)\n\nstart_date &lt;- as.Date(\"2010-06-18\") \n\n# Decomposing the time series\ndecomposed_data &lt;- decompose(bitcoin_ts, type = \"multiplicative\")  # or \"additive\"\n\ndates &lt;- seq(from = start_date, length.out = length(bitcoin_ts), by = \"day\")\n\n# Extracting components and merging them into a data frame\ndf_components &lt;- data.frame(\n  Date = dates,\n  Trend = decomposed_data$trend,\n  Seasonal = decomposed_data$seasonal,\n  Random = decomposed_data$random\n)\n\n# Remove rows with NA values to avoid issues in plotting\ndf_components &lt;- na.omit(df_components)"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#plot-for-timeseries-decomposition",
+    "href": "sbhupath_TSAFinal.html#plot-for-timeseries-decomposition",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Plot for Timeseries Decomposition",
+    "text": "Plot for Timeseries Decomposition\n\n# Plotting each component\nggplot(df_components, aes(x = Date)) +\n  geom_line(aes(y = Trend), color = \"blue\", linetype = \"solid\", linewidth = 1, alpha = 0.8) +\n  geom_line(aes(y = Seasonal), color = \"red\", linetype = \"dashed\", linewidth = 1, alpha = 0.8) +\n  geom_line(aes(y = Random), color = \"green\", linetype = \"dotted\", linewidth = 1, alpha = 0.8) +\n  labs(title = \"Bitcoin Price Decomposition\",\n       x = \"Date\",\n       y = \"Value\",\n       color = \"Component\") +\n  theme_minimal()"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#seasonality-check",
+    "href": "sbhupath_TSAFinal.html#seasonality-check",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Seasonality Check",
+    "text": "Seasonality Check\n\n# Perform Fast Fourier Transform (FFT) on the time series\nfft_result &lt;- fft(bitcoin_ts)\n\n# Compute the power spectrum\npower_spectrum &lt;- Mod(fft_result)^2 / length(bitcoin_ts)\n\n# Identify the dominant frequencies\ndominant_frequencies &lt;- which(power_spectrum == max(power_spectrum))\n\n# Convert the dominant frequencies to seasonal periods\nseasonal_periods &lt;- 365 / dominant_frequencies\n\n# Print the detected seasonal periods\nprint(paste(\"Detected seasonal periods:\", seasonal_periods))\n\n[1] \"Detected seasonal periods: 365\""
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#single-changepoint-detection",
+    "href": "sbhupath_TSAFinal.html#single-changepoint-detection",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Single Changepoint Detection:",
+    "text": "Single Changepoint Detection:\nIn single changepoint detection, methods often focus on identifying a single, significant change in the data’s structure. The goal is to find where a single change in the statistical properties of the data has occurred, estimating the position and evaluating the significance of this change."
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#multiple-changepoint-detection",
+    "href": "sbhupath_TSAFinal.html#multiple-changepoint-detection",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Multiple Changepoint Detection:",
+    "text": "Multiple Changepoint Detection:\nMultiple changepoint detection aims to identify several points where the data properties change. This involves more complex methodologies, such as:\nBinary Segmentation (BinSeg): This method is fast but approximate, suitable for a preliminary analysis. It recursively divides the data into segments and tests each segment for potential changepoints.\nSegment Neighbourhood (SegNeigh): Offers exact results by exhaustively searching over all possible segmentations, which can be computationally expensive.\nPruned Exact Linear Time (PELT): This method is both fast and exact, making it suitable for large datasets or scenarios with multiple expected changes. It aims to minimize a cost function across all segments, penalized by a function of the number of changepoints to control model complexity.\nThese methods often involve minimizing a cost function that measures the fit of segments to the data, adjusted by a penalty that increases with the number of changepoints to prevent overfitting. This balance helps ensure that the detection of changepoints is neither too sensitive (detecting too many false positives) nor too insensitive (missing actual changes)."
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#multiple-cpt-detection",
+    "href": "sbhupath_TSAFinal.html#multiple-cpt-detection",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Multiple Cpt Detection",
+    "text": "Multiple Cpt Detection\n\npenalty_value &lt;- 1000000 * length(bitcoin_history$Price)\n\n# Apply change point detection on mean with the penalty\ncpt_result &lt;- cpt.mean(bitcoin_history$Price, method = \"PELT\", penalty = \"Manual\", pen.value = penalty_value)\n\n# Extract the change points\nchange_points &lt;- cpts(cpt_result)\n\nprint(length(change_points))\n\n[1] 9"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#multiple-chagepoints",
+    "href": "sbhupath_TSAFinal.html#multiple-chagepoints",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Multiple Chagepoints",
+    "text": "Multiple Chagepoints\n\n# Access the respective records from the main dataframe\nchange_point_records &lt;- bitcoin_history[change_points, ]\n\n# If change points are detected, print them as a table\nif(nrow(change_point_records) &gt; 0) {\n  # Use knitr and kableExtra to create a nicely formatted table\n  kable(change_point_records, \"html\", caption = \"Full Records at Detected Change Points in Bitcoin Price\") %&gt;%\n    kable_styling(\"striped\", full_width = F)\n} else {\n  print(\"No change points were detected with the specified penalty value.\")\n}\n\n\n\nFull Records at Detected Change Points in Bitcoin Price\n\n\n\nDate\nPrice\nOpen\nHigh\nLow\nVol.\nChange..\n\n\n\n\n2317\n2017-10-07\n4435.8\n4371.9\n4472.9\n4319.5\n40200\n1.46\n\n\n1152\n2020-12-15\n19434.9\n19273.9\n19556.3\n19076.2\n98390\n0.84\n\n\n1098\n2021-02-07\n38852.9\n39228.9\n39691.7\n37381.6\n125370\n-1.03\n\n\n1002\n2021-05-14\n49839.8\n49704.9\n51459.2\n48874.0\n118840\n0.27\n\n\n859\n2021-10-04\n49227.3\n48200.4\n49481.7\n46958.6\n66920\n2.13\n\n\n799\n2021-12-03\n53631.5\n56495.2\n57543.6\n52008.9\n89200\n-5.07\n\n\n643\n2022-05-08\n34060.0\n35468.0\n35497.0\n33727.0\n671050000\n-3.97\n\n\n332\n2023-03-15\n24282.7\n24699.6\n25108.9\n23932.4\n614310\n-1.69\n\n\n103\n2023-10-30\n34477.9\n34526.7\n34853.3\n34089.5\n45200\n-0.14"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#multiple-changepoint-detetcion-for-exponentially-smoothed-data",
+    "href": "sbhupath_TSAFinal.html#multiple-changepoint-detetcion-for-exponentially-smoothed-data",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Multiple Changepoint Detetcion for Exponentially Smoothed data",
+    "text": "Multiple Changepoint Detetcion for Exponentially Smoothed data\n\nts_price &lt;- ts(bitcoin_history$Price, frequency = 365)\n\n# Defining alpha values and applying exponential smoothing\nalpha_values &lt;- c(0.01, 0.03, 0.05, 0.3)\nmodels &lt;- lapply(alpha_values, function(alpha) {\n  ets_model &lt;- ets(ts_price, \"ANN\", alpha = alpha, opt.crit = \"mse\", lambda = 0)\n  forecast(ets_model, h = 10)\n})\n\nfitted_values &lt;- lapply(models, function(x) x$fitted)\nnames(fitted_values) &lt;- paste(\"Alpha\", alpha_values)\n\nfitted_values$Actual &lt;- bitcoin_history$Price\n\nplot_data &lt;- do.call(cbind, fitted_values)\nplot_data &lt;- as.data.frame(plot_data)\nplot_data$Date &lt;- bitcoin_history$Date\n\nplot_data_long &lt;- tidyr::pivot_longer(plot_data, cols = -Date, names_to = \"Series\", values_to = \"Close\")\n\n# Applying change point detection on the exponential smoothing models\nchange_points_es &lt;- lapply(fitted_values, function(x) {\n  cpt_result &lt;- cpt.mean(x, method = \"PELT\", penalty = \"Manual\", pen.value = penalty_value)\n  cpts(cpt_result)\n})\n\nprint(length(change_points_es))\n\n[1] 5"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#plot-of-multiple-cpt-for-exponentially-smoothed-data",
+    "href": "sbhupath_TSAFinal.html#plot-of-multiple-cpt-for-exponentially-smoothed-data",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Plot of Multiple Cpt for exponentially smoothed data",
+    "text": "Plot of Multiple Cpt for exponentially smoothed data\n\nchange_point_df &lt;- data.frame(\n  Date = bitcoin_history$Date,\n  Actual = bitcoin_history$Price\n)\n\nfor (i in 1:length(alpha_values)) {\n  change_point_df[[paste0(\"Alpha\", alpha_values[i])]] &lt;- 0\n  change_point_df[change_points_es[[i]], paste0(\"Alpha\", alpha_values[i])] &lt;- 1\n}"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#plot",
+    "href": "sbhupath_TSAFinal.html#plot",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Plot",
+    "text": "Plot\n\n# Plotting the Bitcoin prices with change points for each exponential smoothing model\nggplot(change_point_df, aes(x = Date)) +\n  geom_line(aes(y = Actual), color = \"blue\", linewidth = 1) +\n  geom_point(aes(y = Actual, color = paste0(\"Alpha\", alpha_values[1])), data = change_point_df[change_point_df[[paste0(\"Alpha\", alpha_values[1])]] == 1, ], size = 4) +\n  geom_point(aes(y = Actual, color = paste0(\"Alpha\", alpha_values[2])), data = change_point_df[change_point_df[[paste0(\"Alpha\", alpha_values[2])]] == 1, ], size = 4) +\n  geom_point(aes(y = Actual, color = paste0(\"Alpha\", alpha_values[3])), data = change_point_df[change_point_df[[paste0(\"Alpha\", alpha_values[3])]] == 1, ], size = 4) +\n  geom_point(aes(y = Actual, color = paste0(\"Alpha\", alpha_values[4])), data = change_point_df[change_point_df[[paste0(\"Alpha\", alpha_values[4])]] == 1, ], size = 4) +\n  labs(title = \"Bitcoin Close Prices with Change Points in Exponential Smoothing\",\n       x = \"Date\", y = \"Close Price\",\n       color = \"Smoothing Factor\") +\n  theme_minimal() +\n  theme(legend.position = \"bottom\")"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#arima-model",
+    "href": "sbhupath_TSAFinal.html#arima-model",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Arima Model",
+    "text": "Arima Model\n\nsegments &lt;- split(bitcoin_ts, cumsum(seq_along(bitcoin_ts) %in% change_points))\n\nmodels &lt;- lapply(segments, function(segment) {\n    auto.arima(segment)\n})\n\n# Identifying the most recent segment\nrecent_segment_index &lt;- length(models)\n\nrecent_forecast &lt;- forecast(models[[recent_segment_index]], h = 10)"
+  },
+  {
+    "objectID": "sbhupath_TSAFinal.html#thank-you.",
+    "href": "sbhupath_TSAFinal.html#thank-you.",
+    "title": "Time Series, Final Presentation: Multiple Changepoint Detection on Bitcoin History",
+    "section": "Thank you….",
+    "text": "Thank you…."
+  }
+]
